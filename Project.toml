@@ -1,6 +1,6 @@
 name = "NArrays"
 uuid = "b1bcd636-218e-4844-b7ac-c97daa0ccc50"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Gortaf <nicolas.jacquin@gmail.com>"]
 
 [deps]
