@@ -25,11 +25,7 @@ DeltaArray(checkpoint_interval::Int=256) =
 DeltaArray{C, D}(arr::Vector{C}, checkpoint_interval::Int=256) where {C, D} =
     DeltaArray(_delta_encode(arr, checkpoint_interval, D)..., checkpoint_interval)
 
-DeltaArray(arr::Vector{C}, checkpoint_interval::Int=256) where {C} =
-    DeltaArray(_delta_encode(arr, checkpoint_interval)..., checkpoint_interval)
-
-# Unsorted helper
-DeltaArray(arr::Vector{C}, checkpoint_interval::Int=256; presorted::Bool=false) where {C} = 
+DeltaArray(arr::Vector{C}, checkpoint_interval::Int=256; presorted::Bool=false) where {C} =
     DeltaArray(_delta_encode(presorted ? arr : psort!(arr), checkpoint_interval)..., checkpoint_interval)
 
 ## Encoding / decoding ##
