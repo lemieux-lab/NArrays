@@ -1,5 +1,7 @@
 module NArrays
 
+using ProgressMeter
+
 include("DeltaArray.jl")
 include("PackedArray.jl")
 

@@ -1,4 +1,10 @@
 name = "NArrays"
 uuid = "b1bcd636-218e-4844-b7ac-c97daa0ccc50"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Gortaf <nicolas.jacquin@gmail.com>"]
+
+[deps]
+ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
+
+[compat]
+ProgressMeter = "1.11.0"
