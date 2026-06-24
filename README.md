@@ -105,7 +105,7 @@ Adapted from the [Julia multithreading blog post](https://julialang.org/blog/201
 
 ## Installation
 
-This package is not registered. Add it by path:
+This package is registered in the [lab registry](https://github.com/lemieux-lab/LabRegistry.git). If you have added the registry, you may add it as any other package. Otherwise you may add it by path:
 
 ```julia
 using Pkg
