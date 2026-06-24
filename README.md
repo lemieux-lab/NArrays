@@ -26,8 +26,8 @@ a = DeltaArray(unsorted_vec; presorted=false)
 **Memory layout:** Values are split into checkpoints (stored at full `C` width) and deltas (stored at `D` width). A checkpoint is inserted every `checkpoint_interval` elements, and also whenever a delta would overflow `typemax(D)`. The `regular_cp_idx` vector maps each chunk to its checkpoint position, allowing random access without scanning from the start.
 
 **Complexity:**
-- Indexing `a[i]`: O(`checkpoint_interval`) — decodes from the nearest checkpoint
-- Iteration: O(1) amortised — state carries the current checkpoint and value forward
+- Indexing `a[i]`: O(`checkpoint_interval`), decodes from the nearest checkpoint
+- Iteration: O(1) amortised, state carries the current checkpoint and value forward
 - `searchfirst(a, target, lo, hi)`: linear scan in `[lo, hi]` starting from the checkpoint covering `lo`; exits early once the decoded value exceeds `target`
 
 **API:**
