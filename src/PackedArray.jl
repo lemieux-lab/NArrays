@@ -109,6 +109,32 @@ function new_word!(arr::PackedArray{T, W}) where {T, W<:Unsigned}
     return length(arr.words)
 end
 
+## Repacking ##
+
+# Repacks arr into a PackedArray using word type W2, splitting any word whose
+# values no longer fit into as many new words as needed (in order).
+# Returns (repacked_arr, id_map), where id_map[i] lists the new word id(s)
+# that word i's values were split across.
+function repack(arr::PackedArray{T, W1}, ::Type{W2}) where {T, W1<:Unsigned, W2<:Unsigned}
+    new_arr = PackedArray{T, W2}()
+    id_map = Vector{Vector{UInt32}}(undef, length(arr.words))
+
+    @showprogress "Repacking Words..." for i in eachindex(arr.words)
+        wid = new_word!(new_arr)
+        ids = UInt32[wid]
+        for v in arr[i]
+            push!(new_arr, v, wid)
+            if lastindex(new_arr) != wid
+                wid = lastindex(new_arr)
+                push!(ids, UInt32(wid))
+            end
+        end
+        id_map[i] = ids
+    end
+
+    return new_arr, id_map
+end
+
 ## Deduplication ##
 
 # Deduplicates words; returns (deduped_arr, perm, global_perm).
