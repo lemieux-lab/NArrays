@@ -24,12 +24,22 @@ Base.size(arr::PackedArray) = (length(arr.words),)
 Base.IndexStyle(::Type{<:PackedArray}) = Base.IndexLinear()
 
 # Return all values packed in word i as a Vector{T}
+#
+# Single pass over the bitmap window: get_val below re-derives (start, finish) from
+# scratch for one element at a time, which made the naive "call get_val n times" loop
+# O(n*W) per word (each call rescans up to W bits and recopies the bitmap slice).
+# Walking the view once and extracting every value as its terminating bit is found
+# drops that to O(W), independent of how many values are packed into the word.
 function Base.getindex(arr::PackedArray{T, W}, word_id::Integer) where {T, W<:Unsigned}
-    bitmap_word = arr.bitmap[word_bitmap_slice(word_id, W)]
-    n = sum(bitmap_word)
-    assembly = Vector{T}(undef, n)
-    for i in 1:n
-        assembly[i] = T(get_val(arr, word_id, i))
+    word = arr.words[word_id]
+    bitmap_word = @view arr.bitmap[word_bitmap_slice(word_id, W)]
+    assembly = T[]
+    start = 0
+    for (pos, bit) in enumerate(bitmap_word)
+        bit || continue
+        finish = pos
+        push!(assembly, T(word << start >> (start + (bitsizeof(W) - finish))))
+        start = finish
     end
     return assembly
 end
@@ -65,7 +75,7 @@ end
 # Return the elem_id-th value packed in word word_id (as W)
 function get_val(arr::PackedArray{T, W}, word_id::Integer, elem_id::Integer) where {T, W<:Unsigned}
     word = arr.words[word_id]
-    bitmap_word = arr.bitmap[word_bitmap_slice(word_id, W)]
+    bitmap_word = @view arr.bitmap[word_bitmap_slice(word_id, W)]
     sum(bitmap_word) < elem_id && throw("Out of Bound")
     start = 0; finish = 0; counter = 0; ones = 0
     for bit in bitmap_word
