@@ -96,9 +96,8 @@ function Base.push!(arr::PackedArray{T1, W}, elem::T2, word_id::Integer) where {
         arr.words[word_id] |= (elem<<(bitsizeof(W)-last_set-bitsize))
         update_word_bitmap!(arr, word_id, bitsize, last_set)
     else
-        push!(arr.words, W(0))
-        append!(arr.bitmap, falses(bitsizeof(W)))
-        push!(arr, elem, length(arr.words))
+        new_id = new_word!(arr)
+        push!(arr, elem, new_id)
     end
     return arr
 end
@@ -106,16 +105,45 @@ end
 # Pack elem into a brand-new word. Returns arr.
 function Base.push!(arr::PackedArray{T, W}, elem) where {T, W<:Unsigned}
     elem, _ = prepack(elem, W)
-    push!(arr.words, W(0))
-    append!(arr.bitmap, falses(bitsizeof(W)))
-    push!(arr, elem, length(arr.words))
+    new_id = new_word!(arr)
+    push!(arr, elem, new_id)
     return arr
 end
 
+# Pack elem into word_id given its current fill pointer last_set (bits already used in
+# that word), spilling to a new word if there is no space. Returns (word_id, new_last_set)
+# for the word actually written to.
+#
+# Base.push!(arr, elem, word_id) re-derives last_set via word_last_set on every call, an
+# O(W) findlast rescan of the word's bitmap. A caller building a word sequentially (as
+# repack does, one word per source element/k-mer) already knows last_set from the previous
+# call, so this skips the rescan entirely: O(1) amortized per push instead of O(W). At W=256
+# and up, with billions of values pushed across a full repack, the rescan dominates runtime
+# and lets the job run long enough for peak memory to balloon well past what the final
+# structure needs.
+function push_at!(arr::PackedArray{T1, W}, elem::T2, word_id::Integer, last_set::Integer) where {T1, T2, W<:Unsigned}
+    elem, bitsize = prepack(elem, W)
+    if bitsizeof(W) - last_set >= bitsize
+        arr.words[word_id] |= (elem << (bitsizeof(W) - last_set - bitsize))
+        update_word_bitmap!(arr, word_id, bitsize, last_set)
+        return word_id, last_set + bitsize
+    else
+        new_id = new_word!(arr)
+        return push_at!(arr, elem, new_id, 0)
+    end
+end
+
 # Allocate a new empty word and return its index.
+#
+# resize! + fill! extends arr.bitmap's underlying chunk storage in place; the previous
+# `append!(arr.bitmap, falses(bitsizeof(W)))` allocated a whole new W-bit BitVector just to
+# copy it in, which at W=256/512 and one call per source element (hundreds of millions to
+# billions in a full repack) was a large, avoidable source of transient garbage.
 function new_word!(arr::PackedArray{T, W}) where {T, W<:Unsigned}
     push!(arr.words, W(0))
-    append!(arr.bitmap, falses(bitsizeof(W)))
+    old_len = length(arr.bitmap)
+    resize!(arr.bitmap, old_len + bitsizeof(W))
+    @view(arr.bitmap[old_len+1:end]) .= false
     return length(arr.words)
 end
 
@@ -132,10 +160,11 @@ function repack(arr::PackedArray{T, W1}, ::Type{W2}) where {T, W1<:Unsigned, W2<
     @showprogress "Repacking Words..." for i in eachindex(arr.words)
         wid = new_word!(new_arr)
         ids = UInt32[wid]
+        last_set = 0
         for v in arr[i]
-            push!(new_arr, v, wid)
-            if lastindex(new_arr) != wid
-                wid = lastindex(new_arr)
+            new_wid, last_set = push_at!(new_arr, v, wid, last_set)
+            if new_wid != wid
+                wid = new_wid
                 push!(ids, UInt32(wid))
             end
         end
