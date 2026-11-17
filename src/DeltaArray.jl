@@ -123,3 +123,49 @@ function searchfirst(a::DeltaArray{C}, target::C, lo::Int, hi::Int)::Int where {
     end
     return 0
 end
+
+# Decoded value at a position known to be a checkpoint (a.deltas[j] == 0). Regular
+# checkpoints (one every checkpoint_interval positions) resolve in O(1) via
+# regular_cp_idx. Overflow checkpoints (an out-of-band checkpoint inserted because two
+# consecutive values differed by more than typemax(D) -- rare for real, densely-packed
+# k-mer data) have no such direct lookup and fall back to walking from the regular
+# checkpoint covering j, bounded by checkpoint_interval same as the plain 4-arg
+# searchfirst's worst case -- just paid only on this uncommon path instead of every call.
+function _checkpoint_value(a::DeltaArray{C}, j::Int) where {C}
+    inter = a.checkpoint_interval
+    k = (j - 1) ÷ inter
+    (j - 1) % inter == 0 && return a.checkpoints[a.regular_cp_idx[k + 1]]
+    cp = a.regular_cp_idx[k + 1]
+    v = a.checkpoints[cp]
+    chunk_start = k * inter + 1
+    for jj in (chunk_start + 1):j
+        if a.deltas[jj] == 0
+            cp += 1
+            v = a.checkpoints[cp]
+        else
+            v += a.deltas[jj]
+        end
+    end
+    return v
+end
+
+# Same as the 4-arg searchfirst, but starts decoding directly from lo instead of
+# rewinding to the nearest checkpoint, given the caller already knows the decoded value
+# at lo (e.g. cached by a prefix index built once up front, one entry per group). O(hi-lo)
+# instead of O(checkpoint_interval + hi-lo) in the common case where [lo,hi] contains no
+# checkpoint -- a real difference once the prefix index has narrowed the range down to far
+# less than checkpoint_interval, which is typical once many k-mers share few distinct
+# prefixes. Falls back to _checkpoint_value (bounded by checkpoint_interval, same as the
+# 4-arg version) on the rare position where a checkpoint does fall inside the range.
+function searchfirst(a::DeltaArray{C}, target::C, lo::Int, hi::Int, lo_val::C)::Int where {C}
+    isempty(a) && return 0
+    v = lo_val
+    for j in lo:hi
+        if j > lo
+            v = a.deltas[j] == 0 ? _checkpoint_value(a, j) : v + a.deltas[j]
+        end
+        v == target && return j
+        v > target && return 0
+    end
+    return 0
+end

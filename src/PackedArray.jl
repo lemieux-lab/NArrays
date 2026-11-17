@@ -88,17 +88,29 @@ end
 
 ## Push interface ##
 
-# Pack elem into word at word_id, spilling to a new word if there is no space. Returns arr.
-function Base.push!(arr::PackedArray{T1, W}, elem::T2, word_id::Integer) where {T1, T2, W<:Unsigned}
+# Pack elem into word at word_id, spilling to a new word if there is no space.
+# Returns the id of the word actually written to (word_id itself, or a fresh one on
+# overflow) -- callers that need to know whether a new word was created (e.g. to extend
+# a CSR entry) must use this return value, not infer it from lastindex(arr): word_id is
+# in general *not* the array's last word, so an in-place write here leaves lastindex(arr)
+# unchanged and pointing at whatever word happens to be last, which is not word_id and
+# not necessarily related to this push at all.
+function push_to!(arr::PackedArray{T1, W}, elem::T2, word_id::Integer) where {T1, T2, W<:Unsigned}
     elem, bitsize = prepack(elem, W)
     last_set = word_last_set(arr, word_id)
     if bitsizeof(W)-last_set >= bitsize
         arr.words[word_id] |= (elem<<(bitsizeof(W)-last_set-bitsize))
         update_word_bitmap!(arr, word_id, bitsize, last_set)
+        return word_id
     else
         new_id = new_word!(arr)
-        push!(arr, elem, new_id)
+        return push_to!(arr, elem, new_id)
     end
+end
+
+# Pack elem into word at word_id, spilling to a new word if there is no space. Returns arr.
+function Base.push!(arr::PackedArray{T1, W}, elem::T2, word_id::Integer) where {T1, T2, W<:Unsigned}
+    push_to!(arr, elem, word_id)
     return arr
 end
 
